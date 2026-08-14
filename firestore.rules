@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.role == 'admin' ||
+         request.auth.token.admin == true ||
+         request.auth.token.email == 'admin@aurainvest.com');
+    }
+
+    // 1. Users collection
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      // Only allow user to update specific non-sensitive profile fields or emailVerified
+      allow update: if (isOwner(userId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'walletId', 'status', 'accountStatus', 'vipLevel'])) || isAdmin();
+      allow create, delete: if isAdmin();
+    }
+
+    // 2. User Profiles
+    match /userProfiles/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 3. Usernames reservation (unique lookup)
+    match /usernames/{username} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 4. Wallets (Client cannot write/modify balances)
+    match /wallets/{walletId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if false; // All balance updates MUST go through server-side ledger transaction
+    }
+
+    // 5. Immutable Ledger Entries (Append-only by server)
+    match /ledgerEntries/{entryId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Strict server-side append only
+    }
+
+    // 6. Transactions
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Strict server-side only
+    }
+
+    // 7. VIP Plans (Publicly readable, admin editable)
+    match /vipPlans/{planId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 8. Investments
+    match /investments/{investmentId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Server-side handled
+    }
+
+    // 9. Deposits
+    match /deposits/{depositId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Server-side handled
+    }
+
+    // 10. Withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Server-side handled
+    }
+
+    // 11. Internal Transfers
+    match /internalTransfers/{transferId} {
+      allow read: if isAuthenticated() && (resource.data.senderUid == request.auth.uid || resource.data.recipientUid == request.auth.uid || isAdmin());
+      allow write: if false; // Server-side handled
+    }
+
+    // 12. Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if isAdmin();
+    }
+
+    // 14. Audit Logs (Immutable security logs)
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false; // Strict server-side append only
+    }
+
+    // 15. Balance Adjustments
+    match /balanceAdjustments/{adjId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+  }
+}
+

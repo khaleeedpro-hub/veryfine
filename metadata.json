@@ -1,0 +1,6 @@
+{
+  "name": "VeryFineInvest USD",
+  "description": "VeryFineInvest USD Investment and rewards platform featuring double-entry ledger, VIP plans, security PINs, transfers, withdrawals, admin controls, and AI support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

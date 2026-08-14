@@ -1,0 +1,261 @@
+{
+  "entities": {
+    "usernames": {
+      "title": "usernames",
+      "description": "Unique username registry documents",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "usernameLowercase": { "type": "string" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["username", "usernameLowercase", "uid", "createdAt"]
+    },
+    "balanceAdjustments": {
+      "title": "balanceAdjustments",
+      "description": "Administrative controlled balance adjustment records",
+      "type": "object",
+      "properties": {
+        "adjustmentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "adminUid": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "reason": { "type": "string" },
+        "reference": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["adjustmentId", "userId", "adminUid", "type", "amount", "reason", "reference"]
+    },
+    "users": {
+      "title": "users",
+      "description": "User account documents",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" },
+        "walletId": { "type": "string" },
+        "country": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "emailVerified": { "type": "boolean" },
+        "withdrawalPinHash": { "type": "string" },
+        "twoFactorEnabled": { "type": "boolean" }
+      },
+      "required": ["uid", "email", "role", "status", "walletId"]
+    },
+    "userProfiles": {
+      "title": "userProfiles",
+      "description": "Extended profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "phone": { "type": "string" },
+        "country": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "address": { "type": "string" },
+        "profileImage": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "wallets": {
+      "title": "wallets",
+      "description": "Derived user wallet state",
+      "type": "object",
+      "properties": {
+        "walletId": { "type": "string" },
+        "uid": { "type": "string" },
+        "currency": { "type": "string" },
+        "availableBalance": { "type": "number" },
+        "investedBalance": { "type": "number" },
+        "totalEarnings": { "type": "number" },
+        "totalDeposits": { "type": "number" },
+        "totalWithdrawals": { "type": "number" },
+        "totalTransfers": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["walletId", "uid", "currency", "availableBalance"]
+    },
+    "ledgerEntries": {
+      "title": "ledgerEntries",
+      "description": "Immutable financial ledger entries",
+      "type": "object",
+      "properties": {
+        "entryId": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "sourceAccount": { "type": "string" },
+        "destinationAccount": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "type": { "type": "string" },
+        "status": { "type": "string" },
+        "reference": { "type": "string" },
+        "metadata": { "type": "object" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["entryId", "userId", "amount", "type", "createdAt"]
+    },
+    "transactions": {
+      "title": "transactions",
+      "description": "Financial transaction logs",
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" },
+        "balanceBefore": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "description": { "type": "string" },
+        "reference": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["transactionId", "userId", "type", "amount"]
+    },
+    "vipPlans": {
+      "title": "vipPlans",
+      "description": "Available VIP investment plans",
+      "type": "object",
+      "properties": {
+        "planId": { "type": "string" },
+        "name": { "type": "string" },
+        "vipLevel": { "type": "number" },
+        "investmentAmount": { "type": "number" },
+        "dailyEarning": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "status": { "type": "string" },
+        "displayOrder": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["planId", "name", "vipLevel", "investmentAmount", "dailyEarning", "status"]
+    },
+    "investments": {
+      "title": "investments",
+      "description": "Active and completed user investments",
+      "type": "object",
+      "properties": {
+        "investmentId": { "type": "string" },
+        "userId": { "type": "string" },
+        "vipPlanId": { "type": "string" },
+        "planName": { "type": "string" },
+        "vipLevel": { "type": "number" },
+        "principalAmount": { "type": "number" },
+        "dailyEarning": { "type": "number" },
+        "durationDays": { "type": "number" },
+        "startDate": { "type": "string" },
+        "maturityDate": { "type": "string" },
+        "daysCompleted": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["investmentId", "userId", "vipPlanId", "principalAmount", "status"]
+    },
+    "internalTransfers": {
+      "title": "internalTransfers",
+      "description": "Internal P2P USD transfer records",
+      "type": "object",
+      "properties": {
+        "transferId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "recipientUid": { "type": "string" },
+        "senderWalletId": { "type": "string" },
+        "recipientWalletId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "completedAt": { "type": "string" }
+      },
+      "required": ["transferId", "senderUid", "recipientUid", "amount"]
+    },
+    "withdrawals": {
+      "title": "withdrawals",
+      "description": "User withdrawal requests",
+      "type": "object",
+      "properties": {
+        "withdrawalId": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "method": { "type": "string" },
+        "paymentDetails": { "type": "object" },
+        "status": { "type": "string" },
+        "fee": { "type": "number" },
+        "netAmount": { "type": "number" },
+        "riskStatus": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["withdrawalId", "userId", "amount", "status"]
+    },
+    "deposits": {
+      "title": "deposits",
+      "description": "User deposit requests",
+      "type": "object",
+      "properties": {
+        "depositId": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "paymentProvider": { "type": "string" },
+        "providerReference": { "type": "string" },
+        "status": { "type": "string" },
+        "fee": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["depositId", "userId", "amount", "status"]
+    },
+    "notifications": {
+      "title": "notifications",
+      "description": "User system and financial notifications",
+      "type": "object",
+      "properties": {
+        "notificationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["notificationId", "userId", "title", "message"]
+    },
+    "auditLogs": {
+      "title": "auditLogs",
+      "description": "Append-only security and administrative audit logs",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "actorRole": { "type": "string" },
+        "action": { "type": "string" },
+        "targetType": { "type": "string" },
+        "targetId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["logId", "actorUid", "action", "createdAt"]
+    }
+  }
+}
