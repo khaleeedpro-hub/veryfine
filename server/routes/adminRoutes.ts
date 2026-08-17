@@ -3,6 +3,11 @@ import bcrypt from 'bcryptjs';
 import { adminDb } from '../firebase/admin';
 import { authenticateToken, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { executeFinancialTransaction, createNotification, createAuditLog } from '../services/ledgerService';
+import {
+  PLATFORM_RECEIVING_ADDRESS,
+  verifyBscTransaction,
+  DepositAssetConfig,
+} from '../services/bscVerifier';
 
 const router = Router();
 
@@ -323,6 +328,18 @@ router.get('/users/:userId', async (req: AuthenticatedRequest, res: Response) =>
     const txnSnap = await adminDb.collection('transactions').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(20).get();
     const transactions = txnSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
+    // Fetch user deposits
+    const depSnap = await adminDb.collection('deposits').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(20).get();
+    const deposits = depSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    // Fetch user withdrawals
+    const wdrSnap = await adminDb.collection('withdrawals').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(20).get();
+    const withdrawals = wdrSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    // Fetch user internal transfers
+    const trfSnap = await adminDb.collection('internalTransfers').where('senderId', '==', userId).orderBy('createdAt', 'desc').limit(20).get();
+    const transfers = trfSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
     // Fetch user ledger entries
     const ledgerSnap = await adminDb.collection('ledgerEntries').where('userId', '==', userId).orderBy('createdAt', 'desc').limit(20).get();
     const ledgerEntries = ledgerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -371,6 +388,9 @@ router.get('/users/:userId', async (req: AuthenticatedRequest, res: Response) =>
       } : null,
       investments,
       transactions,
+      deposits,
+      withdrawals,
+      transfers,
       ledgerEntries,
       auditLogs,
     });
@@ -720,7 +740,7 @@ router.post('/users/:userId/freeze-wallet', async (req: AuthenticatedRequest, re
   }
 });
 
-// SEND PASSWORD RESET LINK / TRIGGER
+// SEND PASSWORD RESET LINK / TRIGGER (COMPLIANCE & PRIVACY FRIENDLY)
 router.post('/users/:userId/send-password-reset', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { userId } = req.params;
@@ -731,18 +751,57 @@ router.post('/users/:userId/send-password-reset', async (req: AuthenticatedReque
     }
 
     const user = userSnap.data()!;
-    const resetToken = `RST-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+    if (!user.email) {
+      res.status(400).json({ error: 'User does not have a registered email address on file.' });
+      return;
+    }
 
+    const resetToken = `RST-${Date.now()}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+
+    // Attempt Firebase Auth Password Reset Email trigger via Google Identity Toolkit
+    let firebaseEmailSent = false;
+    let firebaseErrorMsg = '';
+    try {
+      // Load API key from config
+      const appConfig = await import('../../firebase-applet-config.json');
+      const apiKey = appConfig.apiKey || appConfig.default?.apiKey;
+      if (apiKey) {
+        const idpRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestType: 'PASSWORD_RESET',
+            email: user.email,
+          }),
+        });
+
+        if (idpRes.ok) {
+          firebaseEmailSent = true;
+        } else {
+          const idpErr = await idpRes.json().catch(() => ({}));
+          firebaseErrorMsg = idpErr?.error?.message || 'Firebase Auth dispatch failed';
+        }
+      }
+    } catch (firebaseErr: any) {
+      console.warn('Firebase password reset email dispatch warning:', firebaseErr?.message);
+      firebaseErrorMsg = firebaseErr?.message;
+    }
+
+    // Record the secure password reset event in Firestore for audit & compliance
     await adminDb.collection('passwordResets').doc(resetToken).set({
       token: resetToken,
       userId,
       email: user.email,
+      username: user.username || '',
       requestedByAdmin: req.user!.id,
-      status: 'pending',
+      adminEmail: req.user!.email || 'Admin',
+      status: firebaseEmailSent ? 'dispatched_via_firebase' : 'dispatched_manual',
+      firebaseEmailSent,
       expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
       createdAt: new Date().toISOString(),
     });
 
+    // Log the action in system audit log
     await createAuditLog(
       req.user!.id,
       req.user!.role,
@@ -751,21 +810,33 @@ router.post('/users/:userId/send-password-reset', async (req: AuthenticatedReque
       userId,
       req.ip || '127.0.0.1',
       req.headers['user-agent'] as string,
-      { email: user.email, resetToken }
+      {
+        email: user.email,
+        username: user.username,
+        resetToken,
+        firebaseEmailSent,
+      }
     );
 
+    // Create user in-app notification
     await createNotification(
       userId,
       'SECURITY',
       'Password Reset Initiated 🔑',
-      'A secure password reset was initiated for your account. Check your registered email for instructions.'
+      `A secure password reset link was dispatched to your registered email (${user.email}). Please follow the instructions to set a new password.`
     );
 
     res.json({
-      message: `Password reset dispatched for ${user.email}.`,
+      success: true,
+      message: firebaseEmailSent
+        ? `Official password reset email successfully sent to ${user.email}.`
+        : `Password reset request registered and dispatched for ${user.email}.`,
+      email: user.email,
       resetToken,
+      firebaseEmailSent,
     });
   } catch (err: any) {
+    console.error('Failed to trigger password reset:', err);
     res.status(500).json({ error: 'Failed to trigger password reset.' });
   }
 });
@@ -1213,7 +1284,7 @@ router.post('/vip-plans/create', async (req: AuthenticatedRequest, res: Response
 });
 
 // ==========================================
-// 5. DEPOSITS & RECONCILIATION
+// 5. DEPOSITS & BLOCKCHAIN RECONCILIATION
 // ==========================================
 router.get('/deposits', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1230,17 +1301,30 @@ router.get('/deposits', async (req: AuthenticatedRequest, res: Response) => {
         depositId: d.depositId || doc.id,
         user_id: d.userId,
         userId: d.userId,
-        username: user?.username || user?.email?.split('@')[0] || 'N/A',
+        username: user?.username || d.username || user?.email?.split('@')[0] || 'N/A',
         email: user?.email || 'N/A',
         amount: Number(d.amount || 0),
+        amountUsd: Number(d.amountUsd || d.amount || 0),
         currency: d.currency || 'USD',
-        payment_method: d.paymentProvider || 'USD Gateway',
-        paymentProvider: d.paymentProvider || 'USD Gateway',
-        providerReference: d.providerReference || '',
-        status: d.status,
+        asset: d.asset || 'USDT',
+        network: d.network || 'BNB Smart Chain (BEP-20)',
+        contractAddress: d.contractAddress || '',
+        transactionHash: d.transactionHash || '',
+        receivingAddress: d.receivingAddress || PLATFORM_RECEIVING_ADDRESS,
+        confirmations: Number(d.confirmations || 0),
+        requiredConfirmations: Number(d.requiredConfirmations || 3),
+        blockNumber: d.blockNumber || null,
+        fromAddress: d.fromAddress || null,
+        toAddress: d.toAddress || null,
+        payment_method: d.paymentProvider || (d.asset ? `${d.asset} (BEP-20)` : 'BNB Smart Chain'),
+        paymentProvider: d.paymentProvider || 'BNB Smart Chain',
+        status: d.status || 'pending',
         fee: Number(d.fee || 0),
         created_at: d.createdAt,
         createdAt: d.createdAt,
+        verifiedAt: d.verifiedAt || null,
+        creditedAt: d.creditedAt || null,
+        failureReason: d.failureReason || null,
       });
     }
 
@@ -1248,6 +1332,114 @@ router.get('/deposits', async (req: AuthenticatedRequest, res: Response) => {
     res.json({ deposits });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch deposits.' });
+  }
+});
+
+// Admin re-checks a deposit against BNB Smart Chain
+router.post('/deposits/:id/recheck', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const depRef = adminDb.collection('deposits').doc(id);
+    const depSnap = await depRef.get();
+
+    if (!depSnap.exists) {
+      res.status(404).json({ error: 'Deposit not found.' });
+      return;
+    }
+
+    const deposit = depSnap.data()!;
+    const txHash = deposit.transactionHash;
+
+    if (!txHash) {
+      res.status(400).json({ error: 'No transaction hash found on this deposit.' });
+      return;
+    }
+
+    const assetsSnap = await adminDb.collection('depositAssets').get();
+    const configuredAssets: DepositAssetConfig[] = [];
+    assetsSnap.forEach((d) => {
+      const data = d.data();
+      if (data && data.enabled !== false) configuredAssets.push(data as DepositAssetConfig);
+    });
+
+    const verification = await verifyBscTransaction(txHash, configuredAssets, deposit.asset);
+    const now = new Date().toISOString();
+
+    if (verification.valid) {
+      if (verification.status === 'completed' && deposit.status !== 'completed') {
+        const creditedAmount = verification.amountUsd || verification.amount || deposit.amount;
+
+        const txnResult = await executeFinancialTransaction({
+          userId: deposit.userId,
+          type: 'CRYPTO_DEPOSIT',
+          amount: creditedAmount,
+          referenceId: id,
+          description: `BNB Smart Chain Deposit: ${verification.amount.toFixed(4)} ${verification.asset} ($${creditedAmount.toFixed(2)} USD)`,
+        });
+
+        await depRef.update({
+          status: 'completed',
+          confirmations: verification.confirmations,
+          blockNumber: verification.blockNumber,
+          fromAddress: verification.fromAddress,
+          toAddress: verification.toAddress,
+          verifiedAt: deposit.verifiedAt || now,
+          creditedAt: now,
+          failureReason: null,
+          updatedAt: now,
+        });
+
+        await createAuditLog(
+          req.user!.id,
+          req.user!.role,
+          'DEPOSIT_BLOCKCHAIN_RECHECK_CREDITED',
+          'deposit',
+          id,
+          req.ip || '127.0.0.1',
+          req.headers['user-agent'] as string,
+          { txHash, amount: creditedAmount, userId: deposit.userId }
+        );
+
+        res.json({
+          message: 'Deposit confirmed on BNB Smart Chain and credited successfully.',
+          status: 'completed',
+          verification,
+        });
+        return;
+      } else {
+        await depRef.update({
+          status: verification.status,
+          confirmations: verification.confirmations,
+          blockNumber: verification.blockNumber,
+          fromAddress: verification.fromAddress,
+          toAddress: verification.toAddress,
+          verifiedAt: deposit.verifiedAt || now,
+          failureReason: null,
+          updatedAt: now,
+        });
+
+        res.json({
+          message: `Verification updated: ${verification.confirmations}/${verification.requiredConfirmations} blocks confirmed.`,
+          status: verification.status,
+          verification,
+        });
+        return;
+      }
+    } else {
+      await depRef.update({
+        status: verification.status,
+        failureReason: verification.reason,
+        updatedAt: now,
+      });
+
+      res.status(400).json({
+        error: verification.reason || 'Verification failed on BNB Smart Chain.',
+        status: verification.status,
+        verification,
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to recheck deposit on blockchain.' });
   }
 });
 
@@ -1276,9 +1468,9 @@ router.post('/deposits/:id/reconcile', async (req: AuthenticatedRequest, res: Re
     const txnResult = await executeFinancialTransaction({
       userId: deposit.userId,
       type: 'DEPOSIT',
-      amount: Number(deposit.amount),
+      amount: Number(deposit.amountUsd || deposit.amount),
       referenceId: id,
-      description: `USD Deposit Reconciled (#${id}): ${notes || 'Manual admin bank wire reconciliation'}`,
+      description: `USD Deposit Reconciled (#${id}): ${notes || 'Manual admin verification'}`,
     });
 
     // 2. Mark deposit completed
@@ -1287,6 +1479,7 @@ router.post('/deposits/:id/reconcile', async (req: AuthenticatedRequest, res: Re
       reconciledBy: req.user!.id,
       reconciliationNotes: notes || 'Admin verified',
       transactionId: txnResult.transactionId,
+      creditedAt: now,
       updatedAt: now,
     });
 
@@ -1305,7 +1498,7 @@ router.post('/deposits/:id/reconcile', async (req: AuthenticatedRequest, res: Re
       deposit.userId,
       'DEPOSIT',
       'Deposit Credited ✅',
-      `Your deposit of $${Number(deposit.amount).toFixed(2)} USD has been approved and credited to your available balance.`
+      `Your deposit of $${Number(deposit.amountUsd || deposit.amount).toFixed(2)} USD has been approved and credited to your available balance.`
     );
 
     res.json({
@@ -1314,6 +1507,110 @@ router.post('/deposits/:id/reconcile', async (req: AuthenticatedRequest, res: Re
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to reconcile deposit.' });
+  }
+});
+
+// ==========================================
+// 5B. DEPOSIT ASSETS CONFIGURATION (ADMIN)
+// ==========================================
+router.get('/deposit-assets', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const snap = await adminDb.collection('depositAssets').get();
+    const assets: any[] = [];
+    snap.forEach((doc) => {
+      assets.push({ id: doc.id, ...doc.data() });
+    });
+    res.json({ assets, receivingAddress: PLATFORM_RECEIVING_ADDRESS });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch deposit assets.' });
+  }
+});
+
+router.put('/deposit-assets/:assetId', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { assetId } = req.params;
+    const { enabled, minimumDeposit, confirmationRequirement, contractAddress, name, symbol } = req.body;
+
+    const assetRef = adminDb.collection('depositAssets').doc(assetId);
+    const assetSnap = await assetRef.get();
+
+    if (!assetSnap.exists) {
+      res.status(404).json({ error: 'Deposit asset not found.' });
+      return;
+    }
+
+    const updateData: any = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (typeof enabled === 'boolean') updateData.enabled = enabled;
+    if (minimumDeposit !== undefined) updateData.minimumDeposit = Number(minimumDeposit);
+    if (confirmationRequirement !== undefined) updateData.confirmationRequirement = Number(confirmationRequirement);
+    if (contractAddress) updateData.contractAddress = contractAddress.trim();
+    if (name) updateData.name = name.trim();
+    if (symbol) updateData.symbol = symbol.trim().toUpperCase();
+
+    await assetRef.update(updateData);
+
+    await createAuditLog(
+      req.user!.id,
+      req.user!.role,
+      'UPDATE_DEPOSIT_ASSET',
+      'depositAsset',
+      assetId,
+      req.ip || '127.0.0.1',
+      req.headers['user-agent'] as string,
+      updateData
+    );
+
+    res.json({ message: `Deposit asset ${assetId} updated successfully.` });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update deposit asset.' });
+  }
+});
+
+router.post('/deposit-assets', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { symbol, name, contractAddress, decimals, minimumDeposit, confirmationRequirement, enabled } = req.body;
+
+    if (!symbol || !name || !contractAddress) {
+      res.status(400).json({ error: 'Symbol, Name, and Contract Address are required.' });
+      return;
+    }
+
+    const assetId = `${symbol.toLowerCase()}-bep20`;
+    const now = new Date().toISOString();
+
+    const newAsset: DepositAssetConfig = {
+      assetId,
+      symbol: symbol.toUpperCase().trim(),
+      name: name.trim(),
+      network: 'BNB Smart Chain (BEP-20)',
+      contractAddress: contractAddress.trim(),
+      decimals: Number(decimals) || 18,
+      minimumDeposit: Number(minimumDeposit) || 10,
+      confirmationRequirement: Number(confirmationRequirement) || 3,
+      enabled: enabled !== false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await adminDb.collection('depositAssets').doc(assetId).set(newAsset);
+
+    await createAuditLog(
+      req.user!.id,
+      req.user!.role,
+      'CREATE_DEPOSIT_ASSET',
+      'depositAsset',
+      assetId,
+      req.ip || '127.0.0.1',
+      req.headers['user-agent'] as string,
+      newAsset
+    );
+
+    res.status(201).json({ message: `Deposit asset ${newAsset.symbol} created.`, asset: newAsset });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to create deposit asset.' });
   }
 });
 
@@ -1577,7 +1874,7 @@ router.get('/search', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { q } = req.query;
     if (!q || typeof q !== 'string' || !q.trim()) {
-      res.json({ users: [], transactions: [], deposits: [], withdrawals: [] });
+      res.json({ users: [], transactions: [], deposits: [], withdrawals: [], ledger: [] });
       return;
     }
 
@@ -1588,40 +1885,101 @@ router.get('/search', async (req: AuthenticatedRequest, res: Response) => {
     const matchedUsers: any[] = [];
     usersSnap.forEach((doc) => {
       const u = doc.data();
-      const uid = u.uid || doc.id;
+      const uid = (u.uid || doc.id).toLowerCase();
       const username = (u.username || '').toLowerCase();
       const email = (u.email || '').toLowerCase();
       const walletId = (u.walletId || '').toLowerCase();
-      if (uid.toLowerCase().includes(term) || username.includes(term) || email.includes(term) || walletId.includes(term)) {
+      if (uid.includes(term) || username.includes(term) || email.includes(term) || walletId.includes(term)) {
         matchedUsers.push({
-          uid,
-          username: u.username || email.split('@')[0],
-          email: u.email,
-          role: u.role,
+          uid: u.uid || doc.id,
+          id: u.uid || doc.id,
+          username: u.username || (u.email ? u.email.split('@')[0] : 'User'),
+          email: u.email || '',
+          role: u.role || 'investor',
           accountStatus: u.accountStatus || u.status || 'active',
           vipLevel: u.vipLevel || 0,
+          walletId: u.walletId || `wlt-${doc.id}`,
         });
       }
     });
 
     // 2. Search Transactions
-    const txnsSnap = await adminDb.collection('transactions').limit(50).get();
+    const txnsSnap = await adminDb.collection('transactions').limit(100).get();
     const matchedTxns: any[] = [];
     txnsSnap.forEach((doc) => {
       const t = doc.data();
       const txnId = (t.transactionId || doc.id).toLowerCase();
-      const ref = (t.reference || '').toLowerCase();
+      const ref = (t.reference || t.referenceId || '').toLowerCase();
       const desc = (t.description || '').toLowerCase();
-      if (txnId.includes(term) || ref.includes(term) || desc.includes(term)) {
-        matchedTxns.push({ id: doc.id, ...t });
+      const uid = (t.userId || '').toLowerCase();
+      if (txnId.includes(term) || ref.includes(term) || desc.includes(term) || uid.includes(term)) {
+        matchedTxns.push({
+          id: doc.id,
+          transactionId: t.transactionId || doc.id,
+          type: t.type,
+          amount: t.amount,
+          status: t.status,
+          userId: t.userId,
+          description: t.description,
+          createdAt: t.createdAt,
+        });
+      }
+    });
+
+    // 3. Search Deposits
+    const depsSnap = await adminDb.collection('deposits').limit(100).get();
+    const matchedDeposits: any[] = [];
+    depsSnap.forEach((doc) => {
+      const d = doc.data();
+      const depId = (d.depositId || doc.id).toLowerCase();
+      const hash = (d.transactionHash || d.hash || '').toLowerCase();
+      const ref = (d.reference || d.referenceId || '').toLowerCase();
+      const uid = (d.userId || '').toLowerCase();
+      if (depId.includes(term) || hash.includes(term) || ref.includes(term) || uid.includes(term)) {
+        matchedDeposits.push({
+          id: doc.id,
+          depositId: d.depositId || doc.id,
+          amount: d.amount,
+          asset: d.asset || d.currency || 'USD',
+          status: d.status,
+          userId: d.userId,
+          transactionHash: d.transactionHash,
+          createdAt: d.createdAt,
+        });
+      }
+    });
+
+    // 4. Search Withdrawals
+    const wdrsSnap = await adminDb.collection('withdrawals').limit(100).get();
+    const matchedWithdrawals: any[] = [];
+    wdrsSnap.forEach((doc) => {
+      const w = doc.data();
+      const wdrId = (w.withdrawalId || doc.id).toLowerCase();
+      const address = (w.walletAddress || w.address || '').toLowerCase();
+      const bankAcct = (w.bankAccountNumber || '').toLowerCase();
+      const uid = (w.userId || '').toLowerCase();
+      if (wdrId.includes(term) || address.includes(term) || bankAcct.includes(term) || uid.includes(term)) {
+        matchedWithdrawals.push({
+          id: doc.id,
+          withdrawalId: w.withdrawalId || doc.id,
+          amount: w.amount,
+          asset: w.asset || 'USD',
+          status: w.status,
+          userId: w.userId,
+          destination: w.walletAddress || w.bankAccountNumber || 'Account',
+          createdAt: w.createdAt,
+        });
       }
     });
 
     res.json({
-      users: matchedUsers.slice(0, 10),
-      transactions: matchedTxns.slice(0, 10),
+      users: matchedUsers.slice(0, 8),
+      transactions: matchedTxns.slice(0, 8),
+      deposits: matchedDeposits.slice(0, 8),
+      withdrawals: matchedWithdrawals.slice(0, 8),
     });
   } catch (err: any) {
+    console.error('Search error:', err);
     res.status(500).json({ error: 'Failed to perform global search.' });
   }
 });
@@ -1714,6 +2072,231 @@ router.post('/process-daily-returns', async (req: AuthenticatedRequest, res: Res
   } catch (err: any) {
     console.error('Process daily returns error:', err);
     res.status(500).json({ error: err.message || 'Failed to process daily returns.' });
+  }
+});
+
+// ==========================================
+// 12. WALLETS DIRECTORY
+// ==========================================
+router.get('/wallets', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { q, status, limit = 100 } = req.query;
+    const [walletsSnap, usersSnap] = await Promise.all([
+      adminDb.collection('wallets').limit(Number(limit)).get(),
+      adminDb.collection('users').get(),
+    ]);
+
+    const userMap = new Map<string, any>();
+    usersSnap.forEach((doc) => {
+      const u = doc.data();
+      userMap.set(u.uid || doc.id, u);
+      if (u.walletId) {
+        userMap.set(u.walletId, u);
+      }
+    });
+
+    let wallets: any[] = [];
+    const term = q ? String(q).toLowerCase().trim() : '';
+
+    walletsSnap.forEach((doc) => {
+      const w = doc.data();
+      const walletId = w.walletId || doc.id;
+      const user = userMap.get(w.userId) || userMap.get(walletId) || {};
+      const username = user.username || user.email?.split('@')[0] || 'Investor';
+      const email = user.email || 'N/A';
+      const walletStatus = w.status || 'active';
+
+      if (status && status !== 'all' && walletStatus !== status) return;
+
+      if (term) {
+        const matchesId = walletId.toLowerCase().includes(term);
+        const matchesAddress = (w.walletAddress || '').toLowerCase().includes(term);
+        const matchesUsername = username.toLowerCase().includes(term);
+        const matchesEmail = email.toLowerCase().includes(term);
+        if (!matchesId && !matchesAddress && !matchesUsername && !matchesEmail) return;
+      }
+
+      wallets.push({
+        id: walletId,
+        walletId,
+        userId: w.userId || user.uid,
+        username,
+        email,
+        walletAddress: w.walletAddress || '',
+        currency: w.currency || 'USD',
+        availableBalance: Number(w.availableBalance || 0),
+        investedBalance: Number(w.investedBalance || 0),
+        totalEarnings: Number(w.totalEarnings || 0),
+        totalDeposits: Number(w.totalDeposits || 0),
+        totalWithdrawals: Number(w.totalWithdrawals || 0),
+        totalTransfers: Number(w.totalTransfers || 0),
+        status: walletStatus,
+        createdAt: w.createdAt || new Date().toISOString(),
+        updatedAt: w.updatedAt || new Date().toISOString(),
+      });
+    });
+
+    wallets.sort((a, b) => b.availableBalance - a.availableBalance);
+    res.json({ wallets });
+  } catch (err: any) {
+    console.error('Fetch wallets error:', err);
+    res.status(500).json({ error: 'Failed to fetch platform wallets.' });
+  }
+});
+
+// ==========================================
+// 13. INVESTMENTS DIRECTORY
+// ==========================================
+router.get('/investments', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { status, limit = 100 } = req.query;
+    const [invSnap, usersSnap] = await Promise.all([
+      adminDb.collection('investments').orderBy('createdAt', 'desc').limit(Number(limit)).get(),
+      adminDb.collection('users').get(),
+    ]);
+
+    const userMap = new Map<string, any>();
+    usersSnap.forEach((doc) => {
+      const u = doc.data();
+      userMap.set(u.uid || doc.id, u);
+    });
+
+    let investments: any[] = [];
+    invSnap.forEach((doc) => {
+      const inv = doc.data();
+      const user = userMap.get(inv.userId) || {};
+      const invStatus = inv.status || 'active';
+
+      if (status && status !== 'all' && invStatus !== status) return;
+
+      investments.push({
+        id: inv.investmentId || doc.id,
+        investmentId: inv.investmentId || doc.id,
+        userId: inv.userId,
+        username: user.username || user.email?.split('@')[0] || 'Investor',
+        email: user.email || 'N/A',
+        planId: inv.planId,
+        planName: inv.planName || 'VIP Plan',
+        vipLevel: inv.vipLevel || 1,
+        investmentAmount: Number(inv.investmentAmount || 0),
+        dailyEarning: Number(inv.dailyEarning || 0),
+        durationDays: Number(inv.durationDays || 120),
+        daysCredited: Number(inv.daysCredited || 0),
+        totalEarned: Number(inv.totalEarned || 0),
+        status: invStatus,
+        startDate: inv.startDate || inv.createdAt,
+        maturityDate: inv.maturityDate,
+        lastEarningDate: inv.lastEarningDate,
+        createdAt: inv.createdAt,
+      });
+    });
+
+    res.json({ investments });
+  } catch (err: any) {
+    console.error('Fetch investments error:', err);
+    res.status(500).json({ error: 'Failed to fetch platform investments.' });
+  }
+});
+
+// ==========================================
+// 14. INTERNAL TRANSFERS DIRECTORY
+// ==========================================
+router.get('/transfers', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { limit = 100 } = req.query;
+    const snap = await adminDb.collection('internalTransfers').orderBy('createdAt', 'desc').limit(Number(limit)).get();
+
+    const transfers = snap.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    res.json({ transfers });
+  } catch (err: any) {
+    console.error('Fetch transfers error:', err);
+    res.status(500).json({ error: 'Failed to fetch internal transfers.' });
+  }
+});
+
+// ==========================================
+// 15. PLATFORM SETTINGS & FINANCIAL LIMITS
+// ==========================================
+router.get('/settings', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const docRef = adminDb.collection('systemSettings').doc('financial');
+    const docSnap = await docRef.get();
+
+    const defaultSettings = {
+      minDepositUsd: 10,
+      minWithdrawalUsd: 15,
+      withdrawalFeePercent: 2.5,
+      transferDailyLimitUsd: 50,
+      transferFeePercent: 0.5,
+      maintenanceMode: false,
+      dailyYieldHourUtc: 0,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (!docSnap.exists) {
+      await docRef.set(defaultSettings);
+      return res.json({ settings: defaultSettings });
+    }
+
+    res.json({ settings: { ...defaultSettings, ...docSnap.data() } });
+  } catch (err: any) {
+    console.error('Fetch settings error:', err);
+    res.status(500).json({ error: 'Failed to fetch system settings.' });
+  }
+});
+
+router.post('/settings', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const {
+      minDepositUsd,
+      minWithdrawalUsd,
+      withdrawalFeePercent,
+      transferDailyLimitUsd,
+      transferFeePercent,
+      maintenanceMode,
+      dailyYieldHourUtc,
+    } = req.body;
+
+    const docRef = adminDb.collection('systemSettings').doc('financial');
+    const now = new Date().toISOString();
+
+    const updatedSettings = {
+      minDepositUsd: Number(minDepositUsd) || 10,
+      minWithdrawalUsd: Number(minWithdrawalUsd) || 15,
+      withdrawalFeePercent: Number(withdrawalFeePercent) || 2.5,
+      transferDailyLimitUsd: Number(transferDailyLimitUsd) || 50,
+      transferFeePercent: Number(transferFeePercent) || 0.5,
+      maintenanceMode: Boolean(maintenanceMode),
+      dailyYieldHourUtc: Number(dailyYieldHourUtc) || 0,
+      updatedAt: now,
+      updatedBy: req.user!.email,
+    };
+
+    await docRef.set(updatedSettings, { merge: true });
+
+    await createAuditLog(
+      req.user!.id,
+      req.user!.role,
+      'PLATFORM_SETTINGS_UPDATED',
+      'system',
+      'financial',
+      req.ip || '127.0.0.1',
+      req.headers['user-agent'] as string,
+      updatedSettings
+    );
+
+    res.json({
+      success: true,
+      message: 'Platform financial parameters updated successfully.',
+      settings: updatedSettings,
+    });
+  } catch (err: any) {
+    console.error('Update settings error:', err);
+    res.status(500).json({ error: 'Failed to update system settings.' });
   }
 });
 

@@ -1,15 +1,4 @@
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  onSnapshot,
-  Unsubscribe,
-} from 'firebase/firestore';
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../lib/firebase/client';
 import { Wallet } from '../types';
 
 export interface WalletState {
@@ -20,7 +9,7 @@ export interface WalletState {
 }
 
 /**
- * Normalizes raw Firestore document data into a typed Wallet interface.
+ * Normalizes raw wallet data into a typed Wallet interface.
  */
 export function mapDocToWallet(id: string, data: any): Wallet {
   if (!data) {
@@ -90,8 +79,7 @@ export function mapDocToWallet(id: string, data: any): Wallet {
 }
 
 /**
- * Fetches user wallet balance directly from Firestore.
- * Strictly reads from the 'wallets' collection in Firestore.
+ * Fetches user wallet balance from server API.
  */
 export async function fetchWalletByUserId(userId: string): Promise<Wallet | null> {
   if (!userId) {
@@ -99,55 +87,27 @@ export async function fetchWalletByUserId(userId: string): Promise<Wallet | null
   }
 
   try {
-    // 1. Try default wallet ID pattern: wlt-{userId}
-    const primaryRef = doc(db, 'wallets', `wlt-${userId}`);
-    const primarySnap = await getDoc(primaryRef);
-
-    if (primarySnap.exists()) {
-      return mapDocToWallet(primarySnap.id, primarySnap.data());
-    }
-
-    // 2. Try direct userId doc
-    const directRef = doc(db, 'wallets', userId);
-    const directSnap = await getDoc(directRef);
-
-    if (directSnap.exists()) {
-      return mapDocToWallet(directSnap.id, directSnap.data());
-    }
-
-    // 3. Query 'wallets' collection by userId field
-    const q = query(collection(db, 'wallets'), where('userId', '==', userId));
-    const querySnap = await getDocs(q);
-
-    if (!querySnap.empty) {
-      const docSnap = querySnap.docs[0];
-      return mapDocToWallet(docSnap.id, docSnap.data());
-    }
-
-    // 4. Check 'users' collection to resolve walletId reference if custom
-    const userRef = doc(db, 'users', userId);
-    const userSnap = await getDoc(userRef);
-
-    if (userSnap.exists()) {
-      const userData = userSnap.data();
-      if (userData?.walletId) {
-        const customRef = doc(db, 'wallets', userData.walletId);
-        const customSnap = await getDoc(customRef);
-        if (customSnap.exists()) {
-          return mapDocToWallet(customSnap.id, customSnap.data());
+    const token = localStorage.getItem('aurainvest_token') || localStorage.getItem('auth_token');
+    if (token) {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.wallet) {
+          return mapDocToWallet(data.wallet.id || `wlt-${userId}`, data.wallet);
         }
       }
     }
-
-    return null;
-  } catch (err: any) {
-    console.error('Error fetching wallet from Firestore:', err);
-    throw new Error(err?.message || 'Failed to fetch wallet from Firestore database.');
+  } catch (apiErr) {
+    console.warn('API fetch in fetchWalletByUserId notice:', apiErr);
   }
+
+  return null;
 }
 
 /**
- * Fetches wallet by wallet address from Firestore.
+ * Fetches wallet by wallet address.
  */
 export async function fetchWalletByAddress(walletAddress: string): Promise<Wallet | null> {
   if (!walletAddress) {
@@ -155,66 +115,63 @@ export async function fetchWalletByAddress(walletAddress: string): Promise<Walle
   }
 
   try {
-    const q = query(collection(db, 'wallets'), where('walletAddress', '==', walletAddress));
-    const querySnap = await getDocs(q);
-
-    if (!querySnap.empty) {
-      const docSnap = querySnap.docs[0];
-      return mapDocToWallet(docSnap.id, docSnap.data());
+    const token = localStorage.getItem('aurainvest_token') || localStorage.getItem('auth_token');
+    if (token) {
+      const res = await fetch(`/api/transfers/vip-check?address=${encodeURIComponent(walletAddress)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.wallet) {
+          return mapDocToWallet(data.wallet.id || walletAddress, data.wallet);
+        }
+      }
     }
-
-    return null;
-  } catch (err: any) {
-    console.error('Error fetching wallet by address from Firestore:', err);
-    throw new Error(err?.message || 'Failed to fetch wallet by address from Firestore.');
+  } catch (err) {
+    console.warn('Notice fetching wallet by address:', err);
   }
+
+  return null;
 }
 
 /**
- * Subscribes to real-time wallet balance changes in Firestore for a user.
+ * Subscribes to periodic wallet balance updates for a user.
  */
 export function subscribeToWallet(
   userId: string,
   onUpdate: (wallet: Wallet | null) => void,
   onError?: (error: Error) => void
-): Unsubscribe {
+): () => void {
   if (!userId) {
     onUpdate(null);
     return () => {};
   }
 
-  const primaryRef = doc(db, 'wallets', `wlt-${userId}`);
+  // Initial fetch
+  fetchWalletByUserId(userId)
+    .then((w) => onUpdate(w))
+    .catch((err) => {
+      if (onError) onError(err);
+    });
 
-  return onSnapshot(
-    primaryRef,
-    (docSnap) => {
-      if (docSnap.exists()) {
-        onUpdate(mapDocToWallet(docSnap.id, docSnap.data()));
-      } else {
-        // Fallback to querying by userId
-        const q = query(collection(db, 'wallets'), where('userId', '==', userId));
-        getDocs(q)
-          .then((snap) => {
-            if (!snap.empty) {
-              onUpdate(mapDocToWallet(snap.docs[0].id, snap.docs[0].data()));
-            } else {
-              onUpdate(null);
-            }
-          })
-          .catch((err) => {
-            if (onError) onError(err);
-          });
-      }
-    },
-    (err) => {
-      console.error('Real-time wallet subscription error:', err);
-      if (onError) onError(new Error(err.message));
-    }
-  );
+  // Periodic polling every 12 seconds
+  const intervalId = setInterval(() => {
+    fetchWalletByUserId(userId)
+      .then((w) => {
+        if (w) onUpdate(w);
+      })
+      .catch((err) => {
+        if (onError) onError(err);
+      });
+  }, 12000);
+
+  return () => {
+    clearInterval(intervalId);
+  };
 }
 
 /**
- * React hook to fetch and monitor user wallet balances from Firestore with loading and error states.
+ * React hook to fetch and monitor user wallet balances with loading and error states.
  */
 export function useWalletBalance(userId: string | null | undefined): WalletState {
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -236,7 +193,7 @@ export function useWalletBalance(userId: string | null | undefined): WalletState
       const data = await fetchWalletByUserId(userId);
       setWallet(data);
     } catch (err: any) {
-      setError(err?.message || 'Failed to load wallet balances from database.');
+      console.warn('Wallet balance fetch notice:', err?.message || err);
       setWallet(null);
     } finally {
       setLoading(false);
@@ -254,3 +211,5 @@ export function useWalletBalance(userId: string | null | undefined): WalletState
     refetch: loadWallet,
   };
 }
+
+

@@ -1,10 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
-  collection,
-  onSnapshot,
-  query,
-} from 'firebase/firestore';
-import { db, auth } from '../../lib/firebase/client';
+import { auth } from '../../lib/firebase/client';
 import {
   Search,
   Users,
@@ -157,7 +152,7 @@ export const PaginatedUserTable: React.FC<PaginatedUserTableProps> = ({
   onToggleSuspend,
   onRefresh,
   initialPageSize = 10,
-  enableRealtimeListener = true,
+  enableRealtimeListener = false,
 }) => {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
@@ -196,85 +191,9 @@ export const PaginatedUserTable: React.FC<PaginatedUserTableProps> = ({
     }
   }, [initialUsers]);
 
-  // Real-time Firestore Listener
-  useEffect(() => {
-    if (!enableRealtimeListener) return;
-
-    const usersColPath = 'users';
-    try {
-      const q = query(collection(db, usersColPath));
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          setIsRealtimeActive(true);
-          setLastRealtimeUpdate(new Date());
-
-          if (!snapshot.empty) {
-            const realtimeDocs: UserRecord[] = snapshot.docs.map((docSnap) => {
-              const data = docSnap.data();
-              const uid = data.uid || docSnap.id;
-              return {
-                id: uid,
-                uid,
-                username: data.username || data.email?.split('@')[0] || 'investor',
-                email: data.email,
-                role: data.role || 'user',
-                accountStatus: data.accountStatus || data.status || 'active',
-                status: data.accountStatus || data.status || 'active',
-                vipLevel: Number(data.vipLevel || 0),
-                fullName: data.displayName || data.fullName || data.full_name || '',
-                walletAddress: data.walletAddress || data.wallet_address || '',
-                availableBalance: Number(data.availableBalance ?? data.available_balance ?? 0),
-                investedBalance: Number(data.investedBalance ?? data.invested_balance ?? 0),
-                totalEarnings: Number(data.totalEarnings ?? data.total_earnings ?? 0),
-                createdAt: data.createdAt || data.created_at || new Date().toISOString(),
-                ...data,
-              };
-            });
-
-            // Merge with existing detailed state to retain enriched server wallet balances if needed
-            setUsersList((prevList) => {
-              const mergedMap = new Map<string, UserRecord>();
-              prevList.forEach((u) => mergedMap.set(u.id || u.uid || '', u));
-              realtimeDocs.forEach((u) => {
-                const existing = mergedMap.get(u.id || u.uid || '');
-                if (existing) {
-                  mergedMap.set(u.id || u.uid || '', {
-                    ...existing,
-                    ...u,
-                    // Keep balances from whichever source is populated
-                    availableBalance:
-                      u.availableBalance || existing.availableBalance || existing.available_balance || 0,
-                    investedBalance:
-                      u.investedBalance || existing.investedBalance || existing.invested_balance || 0,
-                    totalEarnings:
-                      u.totalEarnings || existing.totalEarnings || existing.total_earnings || 0,
-                  });
-                } else {
-                  mergedMap.set(u.id || u.uid || '', u);
-                }
-              });
-              return Array.from(mergedMap.values());
-            });
-          }
-        },
-        (error) => {
-          handleFirestoreError(error, OperationType.GET, usersColPath);
-          setIsRealtimeActive(false);
-        }
-      );
-
-      return () => {
-        unsubscribe();
-      };
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, usersColPath);
-    }
-  }, [enableRealtimeListener]);
-
   // Server-side fetch with filter/sort params
   const fetchUsersFromServer = useCallback(async () => {
-    const authToken = token || localStorage.getItem('auth_token');
+    const authToken = token || localStorage.getItem('aurainvest_token') || localStorage.getItem('auth_token');
     if (!authToken) return;
 
     setIsInternalLoading(true);
@@ -307,6 +226,21 @@ export const PaginatedUserTable: React.FC<PaginatedUserTableProps> = ({
       setIsInternalLoading(false);
     }
   }, [searchTerm, emailSearch, usernameSearch, statusFilter, roleFilter, vipFilter, sortField, sortOrder, token]);
+
+  // Periodic update polling when real-time updates are enabled
+  useEffect(() => {
+    if (!enableRealtimeListener) return;
+
+    const intervalId = setInterval(() => {
+      fetchUsersFromServer();
+      setIsRealtimeActive(true);
+      setLastRealtimeUpdate(new Date());
+    }, 15000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [enableRealtimeListener, fetchUsersFromServer]);
 
   // Trigger server fetch with debounce when search criteria change
   const handleServerFetchDebounced = useCallback(() => {

@@ -3,6 +3,7 @@ import {
   User as UserIcon,
   Wallet,
   Shield,
+  ShieldCheck,
   Clock,
   TrendingUp,
   AlertCircle,
@@ -56,6 +57,9 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
   const [isDeletingUser, setIsDeletingUser] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingLoading, setIsDeletingLoading] = useState(false);
+
+  const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
+  const [isPasswordResetLoading, setIsPasswordResetLoading] = useState(false);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
@@ -197,6 +201,7 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
   };
 
   const handleSendPasswordReset = async () => {
+    setIsPasswordResetLoading(true);
     try {
       const res = await fetch(`/api/admin/users/${userId}/send-password-reset`, {
         method: 'POST',
@@ -210,11 +215,14 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
 
       setActionMsg({
         type: 'success',
-        text: `Password reset dispatched! Token: ${resData.resetToken} (Email notification triggered)`,
+        text: resData.message || `Password reset dispatched for ${resData.email || 'user'}.`,
       });
+      setIsPasswordResetOpen(false);
       fetchDetail();
     } catch (err: any) {
       setActionMsg({ type: 'error', text: err.message });
+    } finally {
+      setIsPasswordResetLoading(false);
     }
   };
 
@@ -366,17 +374,28 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
           </button>
 
           <button
-            onClick={handleSendPasswordReset}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg flex items-center gap-1.5 cursor-pointer font-medium"
+            onClick={() => {
+              setIsPasswordResetOpen(!isPasswordResetOpen);
+              setIsDeletingUser(false);
+              setIsEditingUsername(false);
+              setIsEditingVip(false);
+              setIsEditingStatus(false);
+            }}
+            className={`px-3 py-1.5 border rounded-lg flex items-center gap-1.5 cursor-pointer font-medium transition-colors ${
+              isPasswordResetOpen
+                ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-md'
+                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            }`}
           >
-            <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Send Password Reset</span>
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Secure Password Reset</span>
           </button>
 
           {data?.user?.role !== 'admin' && (
             <button
               onClick={() => {
                 setIsDeletingUser(!isDeletingUser);
+                setIsPasswordResetOpen(false);
                 setDeleteConfirmText('');
               }}
               className={`px-3 py-1.5 border rounded-lg flex items-center gap-1.5 cursor-pointer font-medium transition-colors ${
@@ -390,6 +409,41 @@ export const AdminUserDetailModal: React.FC<AdminUserDetailModalProps> = ({
             </button>
           )}
         </div>
+
+        {/* Secure Password Reset Panel (Privacy & Compliance Friendly) */}
+        {isPasswordResetOpen && (
+          <div className="p-4 bg-emerald-950/40 border-b border-emerald-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
+            <div className="space-y-1 max-w-xl">
+              <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-sm">
+                <KeyRound className="w-4 h-4" />
+                <span>Secure Password Reset Dispatch</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                User passwords are protected with irreversible cryptographic hashing (PBKDF2/bcrypt) and <span className="text-white font-medium">cannot be viewed in plaintext</span>. Clicking dispatch will issue a secure, time-limited password recovery link to the user's registered email: <span className="font-mono text-emerald-300 font-semibold underline">{data?.user?.email || 'user email'}</span>.
+              </p>
+              <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span>Action will be logged in the immutable administrative audit trail.</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+              <button
+                onClick={handleSendPasswordReset}
+                disabled={isPasswordResetLoading}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-extrabold rounded-xl cursor-pointer flex items-center gap-2 shadow-lg transition-all"
+              >
+                <KeyRound className="w-4 h-4" />
+                <span>{isPasswordResetLoading ? 'Dispatching...' : 'Dispatch Reset Email'}</span>
+              </button>
+              <button
+                onClick={() => setIsPasswordResetOpen(false)}
+                className="px-3 py-2 text-slate-400 hover:text-white cursor-pointer rounded-xl hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Delete Confirmation Panel */}
         {isDeletingUser && (

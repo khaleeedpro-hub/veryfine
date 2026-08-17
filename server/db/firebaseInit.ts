@@ -160,5 +160,71 @@ export async function initFirebaseData(): Promise<void> {
     });
   }
 
+  // 3. Deposit Assets (Admin configurable BEP-20 and Native tokens)
+  const depositAssetsRef = adminDb.collection('depositAssets');
+  const depositAssetsSnap = await depositAssetsRef.get();
+
+  if (depositAssetsSnap.empty) {
+    console.log('[FirebaseInit] Seeding default BNB Smart Chain deposit assets...');
+    const defaultDepositAssets = [
+      {
+        assetId: 'usdt-bep20',
+        symbol: 'USDT',
+        name: 'Tether USD (BEP-20)',
+        network: 'BNB Smart Chain (BEP-20)',
+        contractAddress: '0x55d398326f99059fF775485246999027B3197955', // Official BSC USDT
+        decimals: 18,
+        minimumDeposit: 10,
+        confirmationRequirement: 3,
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        assetId: 'bnb-native',
+        symbol: 'BNB',
+        name: 'BNB (Native)',
+        network: 'BNB Smart Chain (BEP-20)',
+        contractAddress: 'NATIVE',
+        decimals: 18,
+        minimumDeposit: 0.02,
+        confirmationRequirement: 3,
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        assetId: 'usdc-bep20',
+        symbol: 'USDC',
+        name: 'USD Coin (BEP-20)',
+        network: 'BNB Smart Chain (BEP-20)',
+        contractAddress: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', // Official BSC USDC
+        decimals: 18,
+        minimumDeposit: 10,
+        confirmationRequirement: 3,
+        enabled: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+
+    for (const asset of defaultDepositAssets) {
+      await depositAssetsRef.doc(asset.assetId).set(asset);
+    }
+  }
+
+  // 4. Crypto Platform Settings
+  const cryptoSettingsRef = adminDb.collection('systemSettings').doc('crypto');
+  const cryptoSettingsSnap = await cryptoSettingsRef.get();
+  if (!cryptoSettingsSnap.exists) {
+    await cryptoSettingsRef.set({
+      platformReceivingAddress: '0x311136bd4daac7083a552407703b6892f2aa0c48',
+      network: 'BNB Smart Chain (BEP-20)',
+      chainId: 56,
+      enabled: true,
+      updatedAt: now,
+    });
+  }
+
   console.log('[FirebaseInit] Firestore initialization completed successfully.');
 }

@@ -30,7 +30,7 @@ export const AdminUsersTab: React.FC<AdminUsersTabProps> = ({
       onOpenAdjustBalance={onOpenAdjustBalance}
       onToggleSuspend={onToggleSuspend}
       initialPageSize={10}
-      enableRealtimeListener={true}
+      enableRealtimeListener={false}
     />
   );
 };

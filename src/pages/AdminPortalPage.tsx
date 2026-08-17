@@ -12,9 +12,17 @@ import {
   LayoutDashboard,
   RefreshCw,
   Sliders,
+  Wallet,
+  Send,
+  FileText,
 } from 'lucide-react';
 import { AdminOverviewTab } from '../components/admin/AdminOverviewTab';
 import { AdminUsersTab } from '../components/admin/AdminUsersTab';
+import { AdminWalletsTab } from '../components/admin/AdminWalletsTab';
+import { AdminInvestmentsTab } from '../components/admin/AdminInvestmentsTab';
+import { AdminTransfersTab } from '../components/admin/AdminTransfersTab';
+import { AdminTransactionsTab } from '../components/admin/AdminTransactionsTab';
+import { AdminSettingsTab } from '../components/admin/AdminSettingsTab';
 import { AdminUserDetailModal } from '../components/admin/AdminUserDetailModal';
 import { AdminAdjustBalanceModal } from '../components/admin/AdminAdjustBalanceModal';
 import { AdminDepositsTab } from '../components/admin/AdminDepositsTab';
@@ -22,15 +30,21 @@ import { AdminWithdrawalsTab } from '../components/admin/AdminWithdrawalsTab';
 import { AdminVipPlansTab } from '../components/admin/AdminVipPlansTab';
 import { AdminLedgerTab } from '../components/admin/AdminLedgerTab';
 import { AdminAuditLogsTab } from '../components/admin/AdminAuditLogsTab';
+import { AdminGlobalSearchBar } from '../components/admin/AdminGlobalSearchBar';
 
-type AdminTab =
+export type AdminTab =
   | 'overview'
   | 'users'
+  | 'wallets'
+  | 'plans'
+  | 'investments'
   | 'deposits'
   | 'withdrawals'
-  | 'plans'
+  | 'transfers'
+  | 'transactions'
   | 'ledger'
-  | 'audit';
+  | 'audit'
+  | 'settings';
 
 export const AdminPortalPage: React.FC = () => {
   const { token, refreshUserContext } = useAuth();
@@ -161,13 +175,18 @@ export const AdminPortalPage: React.FC = () => {
   };
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'users', label: 'Users & Wallets', icon: Users },
-    { id: 'deposits', label: 'Deposits Review', icon: ArrowDownLeft },
-    { id: 'withdrawals', label: 'Withdrawals Queue', icon: ArrowUpRight },
-    { id: 'plans', label: 'VIP Packages', icon: TrendingUp },
-    { id: 'ledger', label: 'Ledger Audit', icon: Database },
-    { id: 'audit', label: 'System Logs', icon: ShieldAlert },
+    { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'wallets', label: 'Wallets', icon: Wallet },
+    { id: 'plans', label: 'VIP Plans', icon: TrendingUp },
+    { id: 'investments', label: 'Investments', icon: Coins },
+    { id: 'deposits', label: 'Deposits', icon: ArrowDownLeft },
+    { id: 'withdrawals', label: 'Withdrawals', icon: ArrowUpRight },
+    { id: 'transfers', label: 'Transfers', icon: Send },
+    { id: 'transactions', label: 'Transactions', icon: FileText },
+    { id: 'ledger', label: 'Ledger', icon: Database },
+    { id: 'audit', label: 'Audit Logs', icon: ShieldAlert },
+    { id: 'settings', label: 'Settings', icon: Sliders },
   ];
 
   return (
@@ -187,10 +206,15 @@ export const AdminPortalPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+          <AdminGlobalSearchBar
+            token={token || ''}
+            onSelectUser={(uid) => setInspectUserId(uid)}
+            onNavigateTab={(tabId) => setActiveTab(tabId as AdminTab)}
+          />
           <button
             onClick={fetchTabContent}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-2 cursor-pointer transition-all"
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all whitespace-nowrap"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             <span>Refresh State</span>
@@ -207,7 +231,7 @@ export const AdminPortalPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as AdminTab)}
-              className={`px-4 py-2.5 rounded-xl flex items-center gap-2 whitespace-nowrap cursor-pointer transition-all ${
+              className={`px-3.5 py-2.5 rounded-xl flex items-center gap-2 whitespace-nowrap cursor-pointer transition-all ${
                 isActive
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent'
@@ -245,6 +269,31 @@ export const AdminPortalPage: React.FC = () => {
           />
         )}
 
+        {activeTab === 'wallets' && (
+          <AdminWalletsTab
+            token={token}
+            onInspectUser={(uid) => setInspectUserId(uid)}
+            onOpenAdjustBalance={(u) => setAdjustBalanceUser(u)}
+          />
+        )}
+
+        {activeTab === 'plans' && (
+          <AdminVipPlansTab
+            plans={plans}
+            isLoading={isLoading}
+            onRefresh={fetchTabContent}
+            token={token}
+            onSuccess={fetchTabContent}
+          />
+        )}
+
+        {activeTab === 'investments' && (
+          <AdminInvestmentsTab
+            token={token}
+            onInspectUser={(uid) => setInspectUserId(uid)}
+          />
+        )}
+
         {activeTab === 'deposits' && (
           <AdminDepositsTab
             deposits={deposits}
@@ -265,13 +314,17 @@ export const AdminPortalPage: React.FC = () => {
           />
         )}
 
-        {activeTab === 'plans' && (
-          <AdminVipPlansTab
-            plans={plans}
-            isLoading={isLoading}
-            onRefresh={fetchTabContent}
+        {activeTab === 'transfers' && (
+          <AdminTransfersTab
             token={token}
-            onSuccess={fetchTabContent}
+            onInspectUser={(uid) => setInspectUserId(uid)}
+          />
+        )}
+
+        {activeTab === 'transactions' && (
+          <AdminTransactionsTab
+            token={token}
+            onInspectUser={(uid) => setInspectUserId(uid)}
           />
         )}
 
@@ -285,6 +338,8 @@ export const AdminPortalPage: React.FC = () => {
         )}
 
         {activeTab === 'audit' && <AdminAuditLogsTab token={token} />}
+
+        {activeTab === 'settings' && <AdminSettingsTab token={token} />}
       </div>
 
       {/* Deep User Record Inspector Drawer / Modal */}

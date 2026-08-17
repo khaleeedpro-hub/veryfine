@@ -4,6 +4,7 @@ export interface PostTransactionParams {
   userId: string;
   type:
     | 'DEPOSIT'
+    | 'CRYPTO_DEPOSIT'
     | 'INVESTMENT'
     | 'DAILY_EARNING'
     | 'INVESTMENT_MATURITY'
@@ -67,6 +68,7 @@ export async function executeFinancialTransaction(
 
     switch (type) {
       case 'DEPOSIT':
+      case 'CRYPTO_DEPOSIT':
         newAvailable += amount;
         newTotalDeposits += amount;
         break;

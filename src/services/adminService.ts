@@ -1,6 +1,5 @@
 import { getIdTokenResult } from 'firebase/auth';
-import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase/client';
+import { auth } from '../lib/firebase/client';
 import { AuditLogItem, UserRole } from '../types';
 
 export interface AdminClaimsResult {
@@ -30,64 +29,68 @@ export interface ManagedUser {
 
 /**
  * Validates whether the currently authenticated Firebase user possesses
- * custom admin claims or an administrative role in Firestore.
+ * custom admin claims or an administrative role.
  */
 export async function getAdminClaims(forceRefresh = true): Promise<AdminClaimsResult> {
+  const token = localStorage.getItem('aurainvest_token') || localStorage.getItem('auth_token');
   const currentUser = auth.currentUser;
-  if (!currentUser) {
-    return {
-      isAdmin: false,
-      role: 'user',
-      uid: null,
-      email: null,
-      claims: {},
-    };
-  }
 
-  try {
-    // 1. Inspect Firebase Auth Custom Token Claims
-    const tokenResult = await getIdTokenResult(currentUser, forceRefresh);
-    const claims = tokenResult.claims || {};
+  // 1. Try Firebase Auth Custom Token Claims if user is present
+  if (currentUser) {
+    try {
+      const tokenResult = await getIdTokenResult(currentUser, forceRefresh);
+      const claims = tokenResult.claims || {};
 
-    const hasAdminClaim = Boolean(
-      claims.admin === true ||
-      claims.role === 'admin' ||
-      claims.isAdmin === true
-    );
+      const hasAdminClaim = Boolean(
+        claims.admin === true ||
+        claims.role === 'admin' ||
+        claims.isAdmin === true
+      );
 
-    // 2. Fallback check on Firestore user document role
-    let firestoreRole = (claims.role as string) || 'user';
-    let isAdmin = hasAdminClaim;
-
-    if (!isAdmin) {
-      const userRef = doc(db, 'users', currentUser.uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        firestoreRole = userData?.role || 'user';
-        if (userData?.role === 'admin' || userData?.isAdmin === true) {
-          isAdmin = true;
-        }
+      if (hasAdminClaim) {
+        return {
+          isAdmin: true,
+          role: (claims.role as string) || 'admin',
+          uid: currentUser.uid,
+          email: currentUser.email,
+          claims,
+        };
       }
+    } catch (err) {
+      console.warn('Error checking Firebase custom claims:', err);
     }
-
-    return {
-      isAdmin,
-      role: firestoreRole,
-      uid: currentUser.uid,
-      email: currentUser.email,
-      claims,
-    };
-  } catch (err: any) {
-    console.error('Error verifying admin claims:', err);
-    return {
-      isAdmin: false,
-      role: 'user',
-      uid: currentUser.uid,
-      email: currentUser.email,
-      claims: {},
-    };
   }
+
+  // 2. Check via /api/auth/me using token
+  if (token) {
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const user = data.user;
+        const isAdmin = user?.role === 'admin';
+        return {
+          isAdmin,
+          role: user?.role || 'user',
+          uid: user?.id || user?.uid || null,
+          email: user?.email || null,
+          claims: { role: user?.role },
+        };
+      }
+    } catch (apiErr) {
+      console.warn('Error fetching /api/auth/me for admin claims:', apiErr);
+    }
+  }
+
+  return {
+    isAdmin: false,
+    role: 'user',
+    uid: currentUser?.uid || null,
+    email: currentUser?.email || null,
+    claims: {},
+  };
 }
 
 /**
@@ -138,46 +141,13 @@ export async function toggleUserSuspension(
         throw new Error(data.error || 'Failed to update user suspension state.');
       }
 
-      return { success: true, message: data.message };
+      return { success: true, message: data.message || 'User status updated successfully.' };
     } catch (apiError: any) {
-      console.warn('API suspension update failed, executing directly on Firestore:', apiError?.message);
+      throw new Error(apiError?.message || 'Failed to update user suspension state.');
     }
   }
 
-  // Fallback direct Firestore update with admin authorization check
-  const newStatus = isSuspended ? 'suspended' : 'active';
-  const targetUserRef = doc(db, 'users', targetUserId);
-  const targetSnap = await getDoc(targetUserRef);
-
-  if (!targetSnap.exists()) {
-    throw new Error('Target user account not found in database.');
-  }
-
-  const targetData = targetSnap.data();
-  if (targetData?.role === 'admin') {
-    throw new Error('Cannot suspend an administrative account.');
-  }
-
-  const now = new Date().toISOString();
-  await updateDoc(targetUserRef, {
-    status: newStatus,
-    updatedAt: now,
-  });
-
-  // Record audit log entry in Firestore
-  await addDoc(collection(db, 'auditLogs'), {
-    actorUid: adminInfo.uid,
-    actorRole: 'admin',
-    action: isSuspended ? 'USER_SUSPENDED' : 'USER_UNSUSPENDED',
-    targetUserId,
-    metadata: { reason },
-    createdAt: now,
-  });
-
-  return {
-    success: true,
-    message: `User account successfully ${isSuspended ? 'suspended' : 'restored'}.`,
-  };
+  throw new Error('Authentication token required to modify user accounts.');
 }
 
 /**
@@ -189,37 +159,30 @@ export async function updateUserAccountStatus(
   newStatus: 'active' | 'suspended' | 'pending' | 'restricted',
   reason?: string
 ): Promise<{ success: boolean; message: string }> {
-  const adminInfo = await requireAdminClaims();
+  await requireAdminClaims();
 
-  if (targetUserId === adminInfo.uid && newStatus === 'suspended') {
-    throw new Error('Cannot suspend your own account.');
+  const token = localStorage.getItem('aurainvest_token');
+  if (!token) {
+    throw new Error('Authentication token required.');
   }
 
-  const targetRef = doc(db, 'users', targetUserId);
-  const targetSnap = await getDoc(targetRef);
+  const res = await fetch(`/api/admin/users/${targetUserId}/status`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status: newStatus, reason }),
+  });
 
-  if (!targetSnap.exists()) {
-    throw new Error('User not found in Firestore.');
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to update user account status.');
   }
-
-  const now = new Date().toISOString();
-  await updateDoc(targetRef, {
-    status: newStatus,
-    updatedAt: now,
-  });
-
-  await addDoc(collection(db, 'auditLogs'), {
-    actorUid: adminInfo.uid,
-    actorRole: 'admin',
-    action: `USER_STATUS_UPDATED_${newStatus.toUpperCase()}`,
-    targetUserId,
-    metadata: { newStatus, reason: reason || 'Admin updated account status' },
-    createdAt: now,
-  });
 
   return {
     success: true,
-    message: `User account status updated to ${newStatus}.`,
+    message: data.message || `User account status updated to ${newStatus}.`,
   };
 }
 

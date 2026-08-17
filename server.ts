@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 
 import { initFirebaseData } from './server/db/firebaseInit';
 import { startEarningScheduler } from './server/services/earningService';
+import { startDepositPoller } from './server/services/depositPoller';
 
 import authRoutes from './server/routes/authRoutes';
 import vipRoutes from './server/routes/vipRoutes';
@@ -28,14 +29,6 @@ async function startServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
-
-  // Initialize Firebase Firestore seed data & Schedulers
-  console.log('[Server] Initializing Firestore default data...');
-  await initFirebaseData();
-  console.log('[Server] Firestore initialized successfully.');
-
-  console.log('[Server] Starting daily earning engine...');
-  startEarningScheduler();
 
   // API Routes FIRST
   app.get('/api/health', (req, res) => {
@@ -69,6 +62,19 @@ async function startServer() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 VeryFineInvest USD Server running on http://0.0.0.0:${PORT}`);
   });
+
+  // Initialize Firebase Firestore seed data & Schedulers in background
+  initFirebaseData()
+    .then(() => {
+      console.log('[Server] Firestore verified & seeded successfully.');
+      startEarningScheduler();
+      startDepositPoller();
+    })
+    .catch((err) => {
+      console.warn('[Server] Non-fatal Firestore seed notice:', err?.message || err);
+      startEarningScheduler();
+      startDepositPoller();
+    });
 
   server.on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {

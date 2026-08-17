@@ -189,24 +189,64 @@ export interface BalanceAdjustment {
   createdAt: string;
 }
 
+export type DepositStatus = 'pending' | 'detecting' | 'confirming' | 'completed' | 'failed' | 'rejected';
+
+export interface DepositAsset {
+  id?: string;
+  assetId: string;
+  symbol: string;
+  name: string;
+  network: string;
+  contractAddress: string;
+  decimals: number;
+  minimumDeposit: number;
+  confirmationRequirement: number;
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DepositConfig {
+  network: string;
+  chainId: number;
+  receivingAddress: string;
+  assets: DepositAsset[];
+}
+
 export interface Deposit {
   id: string;
   depositId?: string;
-  user_id: string;
+  user_id?: string;
   userId?: string;
   username?: string;
   email?: string;
+  walletId?: string;
   wallet_address?: string;
+  network?: string;
+  asset?: string;
+  contractAddress?: string;
   amount: number;
+  amountUsd?: number;
+  decimals?: number;
+  transactionHash?: string;
+  receivingAddress?: string;
+  confirmations?: number;
+  requiredConfirmations?: number;
+  blockNumber?: number | null;
+  fromAddress?: string | null;
+  toAddress?: string | null;
   currency?: string;
-  payment_method: string;
+  payment_method?: string;
   paymentProvider?: string;
   providerReference?: string;
   payment_details?: string;
-  status: TransactionStatus;
+  status: DepositStatus | TransactionStatus | string;
   fee?: number;
-  created_at: string;
   createdAt?: string;
+  created_at?: string;
+  verifiedAt?: string | null;
+  creditedAt?: string | null;
+  failureReason?: string | null;
 }
 
 export interface Withdrawal {

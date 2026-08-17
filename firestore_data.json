@@ -1,0 +1,353 @@
+{
+  "vipPlans": {
+    "vip-plan-1": {
+      "planId": "vip-plan-1",
+      "name": "VIP 1",
+      "vipLevel": 1,
+      "investmentAmount": 20,
+      "dailyEarning": 1,
+      "durationDays": 120,
+      "status": "active",
+      "displayOrder": 1,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "vip-plan-2": {
+      "planId": "vip-plan-2",
+      "name": "VIP 2",
+      "vipLevel": 2,
+      "investmentAmount": 50,
+      "dailyEarning": 2.5,
+      "durationDays": 120,
+      "status": "active",
+      "displayOrder": 2,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "vip-plan-3": {
+      "planId": "vip-plan-3",
+      "name": "VIP 3",
+      "vipLevel": 3,
+      "investmentAmount": 100,
+      "dailyEarning": 5,
+      "durationDays": 120,
+      "status": "active",
+      "displayOrder": 3,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "vip-plan-4": {
+      "planId": "vip-plan-4",
+      "name": "VIP 4",
+      "vipLevel": 4,
+      "investmentAmount": 200,
+      "dailyEarning": 10,
+      "durationDays": 120,
+      "status": "active",
+      "displayOrder": 4,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "vip-plan-5": {
+      "planId": "vip-plan-5",
+      "name": "VIP 5",
+      "vipLevel": 5,
+      "investmentAmount": 500,
+      "dailyEarning": 25,
+      "durationDays": 120,
+      "status": "disabled",
+      "displayOrder": 5,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "vip-plan-6": {
+      "planId": "vip-plan-6",
+      "name": "VIP 6",
+      "vipLevel": 6,
+      "investmentAmount": 1000,
+      "dailyEarning": 50,
+      "durationDays": 120,
+      "status": "disabled",
+      "displayOrder": 6,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    }
+  },
+  "users": {
+    "usr-admin-001": {
+      "uid": "usr-admin-001",
+      "username": "admin",
+      "usernameLowercase": "admin",
+      "email": "admin@aurainvest.com",
+      "passwordHash": "$2b$10$shZcEzv8jAn7EO9fMBX7PeUl5TTQCGQZyOyfxfA0lc2Ly2Uyr014W",
+      "withdrawalPinHash": "$2b$10$nU3b2LINgNUtwXC2DaR56OH6yP4RMQSjtwNLnse/oOv.MokmQDNPC",
+      "role": "admin",
+      "status": "active",
+      "accountStatus": "active",
+      "vipLevel": 4,
+      "walletId": "wlt-admin-001",
+      "country": "United States",
+      "emailVerified": true,
+      "twoFactorEnabled": false,
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T15:49:00.900Z",
+      "lastLoginAt": "2026-08-17T15:49:00.900Z"
+    },
+    "usr-1786978081113-2659": {
+      "uid": "usr-1786978081113-2659",
+      "username": "isah",
+      "usernameLowercase": "isah",
+      "email": "isah@gmail.com",
+      "displayName": "isah",
+      "passwordHash": "$2b$10$uizByFgzIiGj1vWSn5zue./uKUVt9WEaz7LM856e9EA/rIhbEFOuq",
+      "withdrawalPinHash": "$2b$10$QA7AD3RlZwp5DSDpE6Yin.hYsbnaqT1gnfNYodexfgI6MxHNIKvL.",
+      "role": "user",
+      "status": "active",
+      "accountStatus": "active",
+      "vipLevel": 0,
+      "walletId": "wlt-usr-1786978081113-2659",
+      "country": "United States",
+      "emailVerified": true,
+      "twoFactorEnabled": false,
+      "createdAt": "2026-08-17T14:48:01.332Z",
+      "updatedAt": "2026-08-17T14:48:01.332Z",
+      "lastLoginAt": "2026-08-17T14:48:01.332Z"
+    }
+  },
+  "usernames": {
+    "admin": {
+      "username": "admin",
+      "usernameLowercase": "admin",
+      "uid": "usr-admin-001",
+      "createdAt": "2026-08-17T14:45:05.822Z"
+    },
+    "isah": {
+      "username": "isah",
+      "usernameLowercase": "isah",
+      "uid": "usr-1786978081113-2659",
+      "createdAt": "2026-08-17T14:48:01.332Z"
+    }
+  },
+  "userProfiles": {
+    "usr-admin-001": {
+      "uid": "usr-admin-001",
+      "firstName": "System",
+      "lastName": "Administrator",
+      "phone": "+10000000000",
+      "country": "United States",
+      "dateOfBirth": "1990-01-01",
+      "address": "100 Financial Way",
+      "profileImage": "",
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "usr-1786978081113-2659": {
+      "uid": "usr-1786978081113-2659",
+      "firstName": "isah",
+      "lastName": "",
+      "phone": "",
+      "country": "United States",
+      "dateOfBirth": "",
+      "address": "",
+      "profileImage": "",
+      "createdAt": "2026-08-17T14:48:01.332Z",
+      "updatedAt": "2026-08-17T14:48:01.332Z"
+    }
+  },
+  "wallets": {
+    "wlt-admin-001": {
+      "walletId": "wlt-admin-001",
+      "uid": "usr-admin-001",
+      "walletAddress": "WALLET-ADMIN001",
+      "currency": "USD",
+      "availableBalance": 1000,
+      "investedBalance": 0,
+      "totalEarnings": 0,
+      "totalDeposits": 1000,
+      "totalWithdrawals": 0,
+      "totalTransfers": 0,
+      "status": "active",
+      "createdAt": "2026-08-17T14:45:05.822Z",
+      "updatedAt": "2026-08-17T14:45:05.822Z"
+    },
+    "wlt-usr-1786978081113-2659": {
+      "walletId": "wlt-usr-1786978081113-2659",
+      "uid": "usr-1786978081113-2659",
+      "walletAddress": "WALLET-1QGO5DSB",
+      "currency": "USD",
+      "availableBalance": 0,
+      "investedBalance": 0,
+      "totalEarnings": 0,
+      "totalDeposits": 0,
+      "totalWithdrawals": 0,
+      "totalTransfers": 0,
+      "status": "active",
+      "createdAt": "2026-08-17T14:48:01.332Z",
+      "updatedAt": "2026-08-17T14:48:01.332Z"
+    }
+  },
+  "auditLogs": {
+    "AUDIT-1786977917887-732": {
+      "logId": "AUDIT-1786977917887-732",
+      "actorUid": "usr-admin-001",
+      "actorRole": "admin",
+      "action": "LOGIN_SUCCESS",
+      "targetType": "user",
+      "targetId": "usr-admin-001",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "server",
+      "metadata": {},
+      "createdAt": "2026-08-17T14:45:17.887Z"
+    },
+    "AUDIT-1786977919886-359": {
+      "logId": "AUDIT-1786977919886-359",
+      "actorUid": "usr-admin-001",
+      "actorRole": "admin",
+      "action": "LOGIN_SUCCESS",
+      "targetType": "user",
+      "targetId": "usr-admin-001",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "server",
+      "metadata": {},
+      "createdAt": "2026-08-17T14:45:19.886Z"
+    },
+    "AUDIT-1786978081334-659": {
+      "logId": "AUDIT-1786978081334-659",
+      "actorUid": "usr-1786978081113-2659",
+      "actorRole": "user",
+      "action": "REGISTER_SUCCESS",
+      "targetType": "user",
+      "targetId": "usr-1786978081113-2659",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "metadata": {
+        "username": "isah"
+      },
+      "createdAt": "2026-08-17T14:48:01.334Z"
+    },
+    "AUDIT-1786981731250-883": {
+      "logId": "AUDIT-1786981731250-883",
+      "actorUid": "usr-admin-001",
+      "actorRole": "admin",
+      "action": "LOGIN_SUCCESS",
+      "targetType": "user",
+      "targetId": "usr-admin-001",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "server",
+      "metadata": {},
+      "createdAt": "2026-08-17T15:48:51.250Z"
+    },
+    "AUDIT-1786981735377-201": {
+      "logId": "AUDIT-1786981735377-201",
+      "actorUid": "usr-admin-001",
+      "actorRole": "admin",
+      "action": "LOGIN_SUCCESS",
+      "targetType": "user",
+      "targetId": "usr-admin-001",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "server",
+      "metadata": {},
+      "createdAt": "2026-08-17T15:48:55.377Z"
+    },
+    "AUDIT-1786981740901-866": {
+      "logId": "AUDIT-1786981740901-866",
+      "actorUid": "usr-admin-001",
+      "actorRole": "admin",
+      "action": "LOGIN_SUCCESS",
+      "targetType": "user",
+      "targetId": "usr-admin-001",
+      "ipAddress": "127.0.0.1",
+      "userAgent": "server",
+      "metadata": {},
+      "createdAt": "2026-08-17T15:49:00.901Z"
+    }
+  },
+  "notifications": {
+    "NTF-1786978081334-691": {
+      "notificationId": "NTF-1786978081334-691",
+      "userId": "usr-1786978081113-2659",
+      "type": "SYSTEM",
+      "title": "Welcome to VeryFineInvest USD! 🚀",
+      "message": "Your account @isah and secure USD wallet have been created.",
+      "read": false,
+      "createdAt": "2026-08-17T14:48:01.334Z"
+    }
+  },
+  "depositAssets": {
+    "usdt-bep20": {
+      "assetId": "usdt-bep20",
+      "symbol": "USDT",
+      "name": "Tether USD (BEP-20)",
+      "network": "BNB Smart Chain (BEP-20)",
+      "contractAddress": "0x55d398326f99059fF775485246999027B3197955",
+      "decimals": 18,
+      "minimumDeposit": 10,
+      "confirmationRequirement": 3,
+      "enabled": true,
+      "createdAt": "2026-08-17T15:48:44.495Z",
+      "updatedAt": "2026-08-17T15:48:44.495Z"
+    },
+    "bnb-native": {
+      "assetId": "bnb-native",
+      "symbol": "BNB",
+      "name": "BNB (Native)",
+      "network": "BNB Smart Chain (BEP-20)",
+      "contractAddress": "NATIVE",
+      "decimals": 18,
+      "minimumDeposit": 0.02,
+      "confirmationRequirement": 3,
+      "enabled": true,
+      "createdAt": "2026-08-17T15:48:44.495Z",
+      "updatedAt": "2026-08-17T15:48:44.495Z"
+    },
+    "usdc-bep20": {
+      "assetId": "usdc-bep20",
+      "symbol": "USDC",
+      "name": "USD Coin (BEP-20)",
+      "network": "BNB Smart Chain (BEP-20)",
+      "contractAddress": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+      "decimals": 18,
+      "minimumDeposit": 10,
+      "confirmationRequirement": 3,
+      "enabled": true,
+      "createdAt": "2026-08-17T15:48:44.495Z",
+      "updatedAt": "2026-08-17T15:48:44.495Z"
+    }
+  },
+  "systemSettings": {
+    "crypto": {
+      "platformReceivingAddress": "0x311136bd4daac7083a552407703b6892f2aa0c48",
+      "network": "BNB Smart Chain (BEP-20)",
+      "chainId": 56,
+      "enabled": true,
+      "updatedAt": "2026-08-17T15:48:44.495Z"
+    }
+  },
+  "deposits": {
+    "DEP-1786981731378-PYJ3S": {
+      "depositId": "DEP-1786981731378-PYJ3S",
+      "userId": "usr-admin-001",
+      "username": "admin",
+      "walletId": "wlt-admin-001",
+      "network": "BNB Smart Chain (BEP-20)",
+      "asset": "UNKNOWN",
+      "contractAddress": "",
+      "amount": 0,
+      "amountUsd": 0,
+      "decimals": 18,
+      "transactionHash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "receivingAddress": "0x311136bd4daac7083a552407703b6892f2aa0c48",
+      "status": "detecting",
+      "confirmations": 0,
+      "requiredConfirmations": 3,
+      "blockNumber": null,
+      "fromAddress": null,
+      "toAddress": "0x311136bd4daac7083a552407703b6892f2aa0c48",
+      "createdAt": "2026-08-17T15:48:51.378Z",
+      "verifiedAt": null,
+      "creditedAt": null,
+      "failureReason": "Transaction not found on BNB Smart Chain. It might still be broadcasting in the mempool. Please wait a few seconds and try again.",
+      "updatedAt": "2026-08-17T15:48:51.378Z"
+    }
+  }
+}
